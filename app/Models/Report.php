@@ -42,4 +42,9 @@ class Report extends Model
     {
         return $this->hasMany(Photo::class);
     }
+
+    public function aiLogs()
+{
+    return $this->hasMany(AiLog::class);
+}
 }
