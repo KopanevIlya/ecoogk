@@ -5,6 +5,8 @@ import { computed, onBeforeUnmount, watch } from 'vue'
 
 const props = defineProps({
   reports: Array,
+  canSeeAiResults: Boolean,
+  userRole: String,
 })
 
 const hasPollingReports = computed(() =>
@@ -14,8 +16,12 @@ const hasPollingReports = computed(() =>
 )
 
 const hasVisibleProcessingReports = computed(() =>
-  props.reports.some((report) => report.ai_status === 'processing')
+  props.reports.some((report) =>
+    ['pending', 'processing'].includes(report.ai_status)
+  )
 )
+
+const isResponsible = computed(() => props.userRole === 'responsible')
 
 let intervalId = null
 
@@ -103,14 +109,14 @@ const aiStatusClass = (status) => {
 
   <AuthenticatedLayout>
     <template #header>
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between gap-4">
         <h2 class="text-xl font-semibold leading-tight text-gray-800">Отчеты</h2>
 
         <Link
           :href="route('reports.create')"
           class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-indigo-500"
         >
-          Загрузить отчет
+          Загрузить фото
         </Link>
       </div>
     </template>
@@ -121,7 +127,12 @@ const aiStatusClass = (status) => {
           v-if="hasVisibleProcessingReports"
           class="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700"
         >
-          AI-анализ выполняется. Таблица обновляется автоматически.
+          <span v-if="canSeeAiResults">
+            AI-анализ выполняется. Таблица обновляется автоматически.
+          </span>
+          <span v-else>
+            Загрузка принята. Статусы обновляются автоматически.
+          </span>
         </div>
 
         <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg">
@@ -141,49 +152,65 @@ const aiStatusClass = (status) => {
                     <th class="px-4 py-3">Фото</th>
                     <th class="px-4 py-3">Статус</th>
                     <th class="px-4 py-3">AI</th>
-                    <th class="px-4 py-3">Пользователь</th>
+                    <th v-if="!isResponsible" class="px-4 py-3">Пользователь</th>
                     <th class="px-4 py-3">Создан</th>
-                    <th class="px-4 py-3">AI результат</th>
+                    <th v-if="canSeeAiResults" class="px-4 py-3">AI результат</th>
                     <th class="px-4 py-3">Действия</th>
                   </tr>
                 </thead>
 
                 <tbody class="divide-y divide-gray-100 text-sm text-gray-700">
-  <tr v-for="report in reports" :key="report.id" class="align-top">
-    <td class="px-4 py-4">{{ report.id }}</td>
-    <td class="px-4 py-4">{{ report.site ?? '—' }}</td>
-    <td class="px-4 py-4">{{ report.zone ?? '—' }}</td>
-    <td class="px-4 py-4">{{ report.report_month ?? '—' }}</td>
-    <td class="px-4 py-4">{{ report.photos_count ?? 0 }}</td>
-    <td class="px-4 py-4">{{ report.status ?? '—' }}</td>
-    <td class="px-4 py-4">
-      <span
-        class="inline-flex rounded-full px-3 py-1 text-xs font-medium"
-        :class="aiStatusClass(report.ai_status)"
-      >
-        {{ aiStatusLabel(report.ai_status) }}
-      </span>
-    </td>
-    <td class="px-4 py-4">{{ report.created_by ?? '—' }}</td>
-    <td class="px-4 py-4 whitespace-nowrap">{{ report.created_at ?? '—' }}</td>
-    <td class="px-4 py-4 max-w-sm">
-      <div class="whitespace-pre-line break-words">
-        {{ truncateText(report.ai_result, 140) }}
-      </div>
-    </td>
-    <td class="px-4 py-4">
-      <Link
-        :href="route('reports.show', report.id)"
-        class="inline-flex items-center rounded-md bg-gray-900 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-700"
-      >
-        Открыть
-      </Link>
-    </td>
-  </tr>
-</tbody>
+                  <tr v-for="report in reports" :key="report.id" class="align-top">
+                    <td class="px-4 py-4">{{ report.id }}</td>
+                    <td class="px-4 py-4">{{ report.site ?? '—' }}</td>
+                    <td class="px-4 py-4">{{ report.zone ?? '—' }}</td>
+                    <td class="px-4 py-4">{{ report.report_month ?? '—' }}</td>
+                    <td class="px-4 py-4">{{ report.photos_count ?? 0 }}</td>
+                    <td class="px-4 py-4">{{ report.status ?? '—' }}</td>
+
+                    <td class="px-4 py-4">
+                      <span
+                        class="inline-flex rounded-full px-3 py-1 text-xs font-medium"
+                        :class="aiStatusClass(report.ai_status)"
+                      >
+                        {{ aiStatusLabel(report.ai_status) }}
+                      </span>
+                    </td>
+
+                    <td v-if="!isResponsible" class="px-4 py-4">
+                      {{ report.created_by ?? '—' }}
+                    </td>
+
+                    <td class="px-4 py-4 whitespace-nowrap">
+                      {{ report.created_at ?? '—' }}
+                    </td>
+
+                    <td v-if="canSeeAiResults" class="max-w-sm px-4 py-4">
+                      <div class="whitespace-pre-line break-words">
+                        {{ truncateText(report.ai_result, 140) }}
+                      </div>
+                    </td>
+
+                    <td class="px-4 py-4">
+                      <Link
+                        :href="route('reports.show', report.id)"
+                        class="inline-flex items-center rounded-md bg-gray-900 px-3 py-2 text-xs font-semibold text-white hover:bg-gray-700"
+                      >
+                        Открыть
+                      </Link>
+                    </td>
+                  </tr>
+                </tbody>
               </table>
             </div>
           </div>
+        </div>
+
+        <div
+          v-if="isResponsible"
+          class="mt-4 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600"
+        >
+          Вы видите только свои загрузки. Результаты AI-анализа доступны экологу и администратору.
         </div>
       </div>
     </div>

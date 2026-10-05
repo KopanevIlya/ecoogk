@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -13,32 +12,19 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
         'name',
         'email',
         'password',
+        'role',
+        'site_id',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
     protected function casts(): array
     {
         return [
@@ -48,7 +34,32 @@ class User extends Authenticatable
     }
 
     public function reports()
-{
-    return $this->hasMany(\App\Models\Report::class);
-}
+    {
+        return $this->hasMany(\App\Models\Report::class);
+    }
+
+    public function isAdmin(): bool
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isEcologist(): bool
+    {
+        return $this->role === 'ecologist';
+    }
+
+    public function isResponsible(): bool
+    {
+        return $this->role === 'responsible';
+    }
+
+    public function canSeeAiResults(): bool
+    {
+        return $this->isAdmin() || $this->isEcologist();
+    }
+
+    public function canManageAllReports(): bool
+    {
+        return $this->isAdmin() || $this->isEcologist();
+    }
 }

@@ -4,6 +4,8 @@ import { Head, Link } from '@inertiajs/vue3'
 
 const props = defineProps({
   report: Object,
+  canSeeAiResults: Boolean,
+  userRole: String,
 })
 
 const aiStatusLabel = (status) => {
@@ -52,7 +54,7 @@ const aiStatusClass = (status) => {
             Отчет #{{ report.id }}
           </h2>
           <p class="mt-1 text-sm text-gray-500">
-            Подробная информация, фотографии и AI-анализ
+            Подробная информация и фотографии
           </p>
         </div>
 
@@ -105,7 +107,7 @@ const aiStatusClass = (status) => {
                   </dd>
                 </div>
 
-                <div>
+                <div v-if="userRole !== 'responsible'">
                   <dt class="text-gray-500">Пользователь</dt>
                   <dd class="mt-1 font-medium text-gray-900">{{ report.user?.name ?? '—' }}</dd>
                 </div>
@@ -125,7 +127,10 @@ const aiStatusClass = (status) => {
             </div>
           </div>
 
-          <div class="overflow-hidden bg-white shadow-sm sm:rounded-lg lg:col-span-2">
+          <div
+            v-if="canSeeAiResults"
+            class="overflow-hidden bg-white shadow-sm sm:rounded-lg lg:col-span-2"
+          >
             <div class="p-6">
               <h3 class="mb-4 text-lg font-semibold text-gray-900">AI-анализ</h3>
 
@@ -148,6 +153,19 @@ const aiStatusClass = (status) => {
                 class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500"
               >
                 Результат AI пока отсутствует.
+              </div>
+            </div>
+          </div>
+
+          <div
+            v-else
+            class="overflow-hidden bg-white shadow-sm sm:rounded-lg lg:col-span-2"
+          >
+            <div class="p-6">
+              <h3 class="mb-4 text-lg font-semibold text-gray-900">Результат проверки</h3>
+
+              <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500">
+                Результаты AI-анализа недоступны для вашей роли.
               </div>
             </div>
           </div>

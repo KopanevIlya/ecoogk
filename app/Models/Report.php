@@ -43,8 +43,17 @@ class Report extends Model
         return $this->hasMany(Photo::class);
     }
 
-    public function aiLogs()
-{
-    return $this->hasMany(AiLog::class);
-}
+    public function aiLogs(): HasMany
+    {
+        return $this->hasMany(AiLog::class);
+    }
+
+    public function scopeVisibleFor($query, User $user)
+    {
+        if ($user->canManageAllReports()) {
+            return $query;
+        }
+
+        return $query->where('user_id', $user->id);
+    }
 }
