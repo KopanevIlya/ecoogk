@@ -33,12 +33,12 @@ const showingNavigationDropdown = ref(false);
                             <div
                                 class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex"
                             >
-                                <NavLink
+                                <!-- <NavLink
                                     :href="route('dashboard')"
                                     :active="route().current('dashboard')"
                                 >
                                     Dashboard
-                                </NavLink>
+                                </NavLink> -->
 
                                 <NavLink :href="route('reports.index')" :active="route().current('reports.index')">
     Отчеты
@@ -46,6 +46,10 @@ const showingNavigationDropdown = ref(false);
 
 <NavLink :href="route('reports.create')" :active="route().current('reports.create')">
     Загрузить отчет
+</NavLink>
+
+<NavLink :href="route('monthly-report.index')" :active="route().current('monthly-report.index')">
+    Отчет за месяц
 </NavLink>
                             </div>
                         </div>
@@ -149,10 +153,22 @@ const showingNavigationDropdown = ref(false);
                 >
                     <div class="space-y-1 pb-3 pt-2">
                         <ResponsiveNavLink
-                            :href="route('dashboard')"
-                            :active="route().current('dashboard')"
+                            :href="route('reports.index')"
+                            :active="route().current('reports.index')"
                         >
-                            Dashboard
+                            Отчеты
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            :href="route('reports.create')"
+                            :active="route().current('reports.create')"
+                        >
+                          Загрузить отчет
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            :href="route('monthly-report.index')"
+                            :active="route().current('monthly-report.index')"
+                        >
+                          Отчет за месяц
                         </ResponsiveNavLink>
                     </div>
 

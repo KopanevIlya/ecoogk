@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\MonthlyReportController;
 use App\Models\Report;
 use App\Services\AiVisionService;
 use Illuminate\Foundation\Application;
@@ -30,6 +31,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    Route::get('/monthly-report', [MonthlyReportController::class, 'index'])
+    ->name('monthly-report.index');
 
     Route::get('/test-ai/{report}', function (Report $report, AiVisionService $service) {
         if (!auth()->user()->canSeeAiResults()) {
