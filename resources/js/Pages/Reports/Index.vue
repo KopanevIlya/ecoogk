@@ -146,6 +146,7 @@ const aiStatusClass = (status) => {
                 <thead>
                   <tr class="text-left text-sm font-semibold text-gray-900">
                     <th class="px-4 py-3">ID</th>
+                    <th class="px-4 py-3">Компания</th>
                     <th class="px-4 py-3">Участок</th>
                     <th class="px-4 py-3">Зона</th>
                     <th class="px-4 py-3">Месяц</th>
@@ -162,6 +163,7 @@ const aiStatusClass = (status) => {
                 <tbody class="divide-y divide-gray-100 text-sm text-gray-700">
                   <tr v-for="report in reports" :key="report.id" class="align-top">
                     <td class="px-4 py-4">{{ report.id }}</td>
+                    <td class="px-4 py-4">{{ report.company ?? '—' }}</td>
                     <td class="px-4 py-4">{{ report.site ?? '—' }}</td>
                     <td class="px-4 py-4">{{ report.zone ?? '—' }}</td>
                     <td class="px-4 py-4">{{ report.report_month ?? '—' }}</td>

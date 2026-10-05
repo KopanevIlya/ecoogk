@@ -6,10 +6,10 @@ use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
     protected $fillable = [
@@ -17,6 +17,7 @@ class User extends Authenticatable
         'email',
         'password',
         'role',
+        'company_id',
         'site_id',
     ];
 
@@ -36,6 +37,16 @@ class User extends Authenticatable
     public function reports()
     {
         return $this->hasMany(\App\Models\Report::class);
+    }
+
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class);
+    }
+
+    public function site(): BelongsTo
+    {
+        return $this->belongsTo(Site::class);
     }
 
     public function isAdmin(): bool
@@ -60,6 +71,6 @@ class User extends Authenticatable
 
     public function canManageAllReports(): bool
     {
-        return $this->isAdmin() || $this->isEcologist();
+        return $this->isAdmin();
     }
 }

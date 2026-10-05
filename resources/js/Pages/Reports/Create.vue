@@ -17,6 +17,7 @@ const form = useForm({
 })
 
 const isResponsible = computed(() => props.userRole === 'responsible')
+const isEcologist = computed(() => props.userRole === 'ecologist')
 
 const submit = () => {
   form.post(route('reports.store'), {
@@ -26,6 +27,12 @@ const submit = () => {
 
 const handleFiles = (event) => {
   form.photos = Array.from(event.target.files || [])
+}
+
+const siteLabel = (site) => {
+  return site.company?.name
+    ? `${site.company.name} / ${site.name}`
+    : site.name
 }
 </script>
 
@@ -49,6 +56,20 @@ const handleFiles = (event) => {
             </p>
           </div>
 
+          <div
+            v-if="isEcologist"
+            class="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700"
+          >
+            Вам доступны только участки вашей компании.
+          </div>
+
+          <div
+            v-if="isResponsible"
+            class="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+          >
+            Вы можете загружать фотографии только по участкам своей компании. Результаты AI-анализа вам не отображаются.
+          </div>
+
           <form @submit.prevent="submit" class="space-y-6">
             <div>
               <label class="block text-sm font-medium text-gray-700">Участок</label>
@@ -58,7 +79,7 @@ const handleFiles = (event) => {
               >
                 <option value="">Выберите участок</option>
                 <option v-for="site in sites" :key="site.id" :value="site.id">
-                  {{ site.name }}
+                  {{ siteLabel(site) }}
                 </option>
               </select>
               <div v-if="form.errors.site_id" class="mt-1 text-sm text-red-600">
@@ -123,13 +144,6 @@ const handleFiles = (event) => {
                   {{ file.name }}
                 </li>
               </ul>
-            </div>
-
-            <div
-              v-if="isResponsible"
-              class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800"
-            >
-              После загрузки фотографий они будут доступны для проверки экологу и администратору. Результаты AI-анализа вам не отображаются.
             </div>
 
             <div class="flex flex-wrap gap-3">

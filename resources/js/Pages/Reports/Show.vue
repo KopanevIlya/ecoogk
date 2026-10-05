@@ -76,6 +76,11 @@ const aiStatusClass = (status) => {
 
               <dl class="space-y-4 text-sm">
                 <div>
+                  <dt class="text-gray-500">Компания</dt>
+                  <dd class="mt-1 font-medium text-gray-900">{{ report.company?.name ?? '—' }}</dd>
+                </div>
+
+                <div>
                   <dt class="text-gray-500">Участок</dt>
                   <dd class="mt-1 font-medium text-gray-900">{{ report.site?.name ?? '—' }}</dd>
                 </div>

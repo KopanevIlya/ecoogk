@@ -50,8 +50,14 @@ class Report extends Model
 
     public function scopeVisibleFor($query, User $user)
     {
-        if ($user->canManageAllReports()) {
+        if ($user->isAdmin()) {
             return $query;
+        }
+
+        if ($user->isEcologist()) {
+            return $query->whereHas('site', function ($siteQuery) use ($user) {
+                $siteQuery->where('company_id', $user->company_id);
+            });
         }
 
         return $query->where('user_id', $user->id);

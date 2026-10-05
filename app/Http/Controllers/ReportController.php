@@ -19,7 +19,7 @@ class ReportController extends Controller
     {
         $user = Auth::user();
 
-        $reports = Report::with(['site', 'zone', 'photos', 'user'])
+        $reports = Report::with(['site.company', 'zone', 'photos', 'user'])
             ->visibleFor($user)
             ->latest()
             ->get()
@@ -27,6 +27,7 @@ class ReportController extends Controller
                 return [
                     'id' => $report->id,
                     'site' => $report->site?->name,
+                    'company' => $report->site?->company?->name,
                     'zone' => $report->zone?->name,
                     'report_month' => $report->report_month?->format('Y-m-d'),
                     'comment' => $report->comment,
@@ -50,8 +51,14 @@ class ReportController extends Controller
     {
         $user = Auth::user();
 
+        $sitesQuery = Site::where('active', true)->with('company');
+
+        if ($user->isEcologist() || $user->isResponsible()) {
+            $sitesQuery->where('company_id', $user->company_id);
+        }
+
         return Inertia::render('Reports/Create', [
-            'sites' => Site::where('active', true)->get(['id', 'name']),
+            'sites' => $sitesQuery->get(['id', 'company_id', 'name']),
             'zones' => Zone::where('active', true)->get(['id', 'name']),
             'userRole' => $user->role,
         ]);
@@ -59,6 +66,8 @@ class ReportController extends Controller
 
     public function store(Request $request)
     {
+        $user = Auth::user();
+
         $request->validate([
             'site_id' => ['required', 'exists:sites,id'],
             'zone_id' => ['required', 'exists:zones,id'],
@@ -67,13 +76,19 @@ class ReportController extends Controller
             'photos.*' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:5120'],
         ]);
 
+        $site = Site::with('company')->findOrFail($request->site_id);
+
+        if (($user->isEcologist() || $user->isResponsible()) && $site->company_id !== $user->company_id) {
+            abort(403, 'Вы не можете загружать фото для этого участка.');
+        }
+
         $now = Carbon::now();
         $reportMonth = $now->copy()->startOfMonth();
         $folderMonth = $now->format('Y-m');
 
-        $report = DB::transaction(function () use ($request, $reportMonth, $folderMonth) {
+        $report = DB::transaction(function () use ($request, $reportMonth, $folderMonth, $user, $site) {
             $report = Report::create([
-                'user_id' => Auth::id(),
+                'user_id' => $user->id,
                 'site_id' => $request->site_id,
                 'zone_id' => $request->zone_id,
                 'report_month' => $reportMonth,
@@ -83,7 +98,7 @@ class ReportController extends Controller
             ]);
 
             foreach ($request->file('photos') as $file) {
-                $path = $file->store("reports/{$request->site_id}/{$folderMonth}", 'public');
+                $path = $file->store("reports/{$site->company_id}/{$request->site_id}/{$folderMonth}", 'public');
 
                 Photo::create([
                     'report_id' => $report->id,
@@ -108,16 +123,20 @@ class ReportController extends Controller
     {
         $user = Auth::user();
 
-        if (!$user->canManageAllReports() && $report->user_id !== $user->id) {
-            abort(403);
-        }
-
         $report->load([
-            'site',
+            'site.company',
             'zone',
             'user',
             'photos',
         ]);
+
+        if ($user->isResponsible() && $report->user_id !== $user->id) {
+            abort(403);
+        }
+
+        if ($user->isEcologist() && $report->site?->company_id !== $user->company_id) {
+            abort(403);
+        }
 
         return Inertia::render('Reports/Show', [
             'report' => [
@@ -131,6 +150,10 @@ class ReportController extends Controller
                 'site' => $report->site ? [
                     'id' => $report->site->id,
                     'name' => $report->site->name,
+                ] : null,
+                'company' => $report->site && $report->site->company ? [
+                    'id' => $report->site->company->id,
+                    'name' => $report->site->company->name,
                 ] : null,
                 'zone' => $report->zone ? [
                     'id' => $report->zone->id,
