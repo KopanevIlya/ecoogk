@@ -51,13 +51,18 @@ class SendMonthlyReportsCommand extends Command
                 $exportRows = $service->makeExportRows($data['rows']);
 
                 $fileName = 'monthly-report-' . $month . '-company-' . $company->id . '.xlsx';
-                $filePath = storage_path('app/' . $fileName);
 
-                Excel::store(new MonthlyReportExport($exportRows), $fileName);
+Excel::store(new MonthlyReportExport($exportRows), $fileName, 'local');
 
-                Mail::to($email)->send(
-                    new MonthlyReportMail($company->name, $month, $filePath)
-                );
+$filePath = storage_path('app/' . $fileName);
+
+if (! file_exists($filePath)) {
+    throw new \RuntimeException('Export file was not created: ' . $filePath);
+}
+
+Mail::to($email)->send(
+    new MonthlyReportMail($company->name, $month, $filePath)
+);
 
                 if (file_exists($filePath)) {
                     unlink($filePath);
