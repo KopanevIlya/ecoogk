@@ -11,6 +11,7 @@ class Company extends Model
         'name',
         'code',
         'active',
+        'report_email',
     ];
 
     public function sites(): HasMany
