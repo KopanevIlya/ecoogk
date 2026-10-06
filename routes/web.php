@@ -34,6 +34,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/monthly-report', [MonthlyReportController::class, 'index'])
     ->name('monthly-report.index');
+    Route::get('/monthly-report/export', [MonthlyReportController::class, 'export'])
+    ->name('monthly-report.export');
 
     Route::get('/test-ai/{report}', function (Report $report, AiVisionService $service) {
         if (!auth()->user()->canSeeAiResults()) {

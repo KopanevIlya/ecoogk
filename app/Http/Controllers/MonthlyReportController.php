@@ -2,16 +2,85 @@
 
 namespace App\Http\Controllers;
 
+use App\Exports\MonthlyReportExport;
 use App\Models\Company;
 use App\Models\Report;
 use App\Models\Site;
 use App\Models\Zone;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Maatwebsite\Excel\Facades\Excel;
 
 class MonthlyReportController extends Controller
 {
     public function index(Request $request)
+    {
+        [$data, $companies, $month, $companyId, $user] = $this->buildReportData($request);
+
+        return Inertia::render('MonthlyReport/Index', [
+            'filters' => [
+                'month' => $month,
+                'company_id' => $companyId,
+            ],
+            'companies' => $companies,
+            'rows' => $data['rows'],
+            'summary' => $data['summary'],
+            'userRole' => $user->role,
+        ]);
+    }
+
+    public function export(Request $request)
+    {
+        [$data, $companies, $month, $companyId] = $this->buildReportData($request);
+
+        $rows = [
+            [
+                'Компания',
+                'Участок',
+                'Зона',
+                'Месяц',
+                'Статус загрузки',
+                'Количество фото',
+                'Дата загрузки',
+                'Пользователь',
+                'AI статус',
+                'Замечания',
+                'Рекомендации',
+                'Полный AI результат',
+            ],
+        ];
+
+        foreach ($data['rows'] as $row) {
+            $rows[] = [
+                $row['company'],
+                $row['site'],
+                $row['zone'],
+                $row['month'],
+                $row['status_label'],
+                $row['photos_count'],
+                $row['created_at'],
+                $row['created_by'],
+                $this->aiStatusLabel($row['ai_status']),
+                $row['issues'],
+                $row['recommendations'],
+                $row['ai_result'],
+            ];
+        }
+
+        $companySuffix = 'all';
+
+        if ($companyId) {
+            $company = $companies->firstWhere('id', $companyId);
+            $companySuffix = $company?->code ?: $company?->name ?: 'company';
+        }
+
+        $filename = 'monthly-report-' . $month . '-' . $companySuffix . '.xlsx';
+
+        return Excel::download(new MonthlyReportExport($rows), $filename);
+    }
+
+    protected function buildReportData(Request $request): array
     {
         $user = $request->user();
 
@@ -21,6 +90,9 @@ class MonthlyReportController extends Controller
         if ($user->role === 'ecologist') {
             $companyId = $user->company_id;
         }
+
+        $from = Carbon::createFromFormat('Y-m', $month)->startOfMonth()->toDateString();
+        $to = Carbon::createFromFormat('Y-m', $month)->endOfMonth()->toDateString();
 
         $companies = Company::query()
             ->where('active', true)
@@ -52,10 +124,7 @@ class MonthlyReportController extends Controller
                 'site.company:id,name,code',
                 'zone:id,name,code',
             ])
-            ->whereBetween('report_month', [
-                $month . '-01',
-                $month . '-31',
-            ])
+            ->whereBetween('report_month', [$from, $to])
             ->when($companyId, function ($query) use ($companyId) {
                 $query->whereHas('site', function ($q) use ($companyId) {
                     $q->where('company_id', $companyId);
@@ -81,6 +150,9 @@ class MonthlyReportController extends Controller
                 $key = $site->id . '_' . $zone->id;
                 $report = $reportMap[$key] ?? null;
 
+                $aiResult = $report?->ai_result ?? '—';
+                $parsed = $this->extractAiSections($aiResult);
+
                 $rows[] = [
                     'company' => $site->company?->name ?? '—',
                     'company_code' => $site->company?->code ?? '—',
@@ -95,7 +167,9 @@ class MonthlyReportController extends Controller
                     'created_at' => $report?->created_at?->format('d.m.Y H:i') ?? '—',
                     'created_by' => $report?->user?->name ?? '—',
                     'ai_status' => $report?->ai_status ?? '—',
-                    'ai_result' => $report?->ai_result ?? '—',
+                    'ai_result' => $aiResult,
+                    'issues' => $parsed['issues'],
+                    'recommendations' => $parsed['recommendations'],
                     'report_id' => $report?->id,
                 ];
             }
@@ -105,19 +179,89 @@ class MonthlyReportController extends Controller
         $uploaded = collect($rows)->where('uploaded', true)->count();
         $missing = $total - $uploaded;
 
-        return Inertia::render('MonthlyReport/Index', [
-            'filters' => [
-                'month' => $month,
-                'company_id' => $companyId,
+        return [
+            [
+                'rows' => $rows,
+                'summary' => [
+                    'total' => $total,
+                    'uploaded' => $uploaded,
+                    'missing' => $missing,
+                ],
             ],
-            'companies' => $companies,
-            'rows' => $rows,
-            'summary' => [
-                'total' => $total,
-                'uploaded' => $uploaded,
-                'missing' => $missing,
-            ],
-            'userRole' => $user->role,
-        ]);
+            $companies,
+            $month,
+            $companyId,
+            $user,
+        ];
+    }
+
+    protected function extractAiSections(?string $text): array
+    {
+        if (! $text || $text === '—') {
+            return [
+                'issues' => '—',
+                'recommendations' => '—',
+            ];
+        }
+
+        $normalized = str_replace(["\r\n", "\r"], "\n", $text);
+
+        $issues = $this->extractSection($normalized, ['Замечания:', 'Недостатки:'], ['Рекомендации:']);
+        $recommendations = $this->extractSection($normalized, ['Рекомендации:'], []);
+
+        return [
+            'issues' => $issues ?: '—',
+            'recommendations' => $recommendations ?: '—',
+        ];
+    }
+
+    protected function extractSection(string $text, array $starts, array $ends): ?string
+    {
+        $startPos = null;
+        $startLabel = null;
+
+        foreach ($starts as $label) {
+            $pos = mb_stripos($text, $label);
+
+            if ($pos !== false && ($startPos === null || $pos < $startPos)) {
+                $startPos = $pos;
+                $startLabel = $label;
+            }
+        }
+
+        if ($startPos === null || $startLabel === null) {
+            return null;
+        }
+
+        $contentStart = $startPos + mb_strlen($startLabel);
+        $content = mb_substr($text, $contentStart);
+
+        $endPos = null;
+
+        foreach ($ends as $label) {
+            $pos = mb_stripos($content, $label);
+
+            if ($pos !== false && ($endPos === null || $pos < $endPos)) {
+                $endPos = $pos;
+            }
+        }
+
+        if ($endPos !== null) {
+            $content = mb_substr($content, 0, $endPos);
+        }
+
+        return trim($content) ?: null;
+    }
+
+    protected function aiStatusLabel(?string $status): string
+    {
+        return match ($status) {
+            'pending' => 'В очереди',
+            'processing' => 'Анализируется',
+            'done' => 'Готово',
+            'failed' => 'Ошибка',
+            'disabled' => 'Отключен',
+            default => $status ?: '—',
+        };
     }
 }

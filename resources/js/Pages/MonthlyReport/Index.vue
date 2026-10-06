@@ -23,7 +23,16 @@ const submit = () => {
   })
 }
 
-const truncateText = (text, length = 180) => {
+const exportReport = () => {
+  const params = new URLSearchParams()
+
+  if (form.month) params.append('month', form.month)
+  if (form.company_id) params.append('company_id', form.company_id)
+
+  window.location.href = `${route('monthly-report.export')}?${params.toString()}`
+}
+
+const truncateText = (text, length = 140) => {
   if (!text || text === '—') return '—'
   return text.length > length ? text.slice(0, length) + '...' : text
 }
@@ -40,8 +49,6 @@ const aiStatusLabel = (status) => {
       return 'Ошибка'
     case 'disabled':
       return 'Отключен'
-    case '—':
-      return '—'
     default:
       return status ?? '—'
   }
@@ -126,12 +133,20 @@ const hasCompanyFilter = computed(() => props.userRole === 'admin')
               </select>
             </div>
 
-            <div>
+            <div class="flex gap-2">
               <button
                 type="submit"
                 class="rounded bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
               >
                 Сформировать
+              </button>
+
+              <button
+                type="button"
+                @click="exportReport"
+                class="rounded bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700"
+              >
+                Экспорт в Excel
               </button>
             </div>
           </form>
@@ -156,7 +171,8 @@ const hasCompanyFilter = computed(() => props.userRole === 'admin')
                     <th class="px-4 py-3">Дата загрузки</th>
                     <th class="px-4 py-3">Пользователь</th>
                     <th class="px-4 py-3">AI</th>
-                    <th class="px-4 py-3">AI результат</th>
+                    <th class="px-4 py-3">Замечания</th>
+                    <th class="px-4 py-3">Рекомендации</th>
                   </tr>
                 </thead>
 
@@ -165,6 +181,7 @@ const hasCompanyFilter = computed(() => props.userRole === 'admin')
                     v-for="(row, index) in rows"
                     :key="`${row.company_code}-${row.site_code}-${row.zone_code}-${index}`"
                     class="align-top"
+                    :class="!row.uploaded ? 'bg-red-50' : ''"
                   >
                     <td class="px-4 py-4">{{ row.company }}</td>
                     <td class="px-4 py-4">{{ row.site }}</td>
@@ -193,9 +210,15 @@ const hasCompanyFilter = computed(() => props.userRole === 'admin')
                       </span>
                     </td>
 
-                    <td class="max-w-md px-4 py-4">
+                    <td class="max-w-xs px-4 py-4">
                       <div class="whitespace-pre-line break-words">
-                        {{ truncateText(row.ai_result, 180) }}
+                        {{ truncateText(row.issues, 140) }}
+                      </div>
+                    </td>
+
+                    <td class="max-w-xs px-4 py-4">
+                      <div class="whitespace-pre-line break-words">
+                        {{ truncateText(row.recommendations, 140) }}
                       </div>
                     </td>
                   </tr>
