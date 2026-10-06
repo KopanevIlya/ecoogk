@@ -8,12 +8,14 @@ use App\Models\Company;
 use App\Services\MonthlyReportService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Mail;
+use Maatwebsite\Excel\Excel as ExcelFormat;
 use Maatwebsite\Excel\Facades\Excel;
 use Throwable;
 
 class SendMonthlyReportsCommand extends Command
 {
     protected $signature = 'reports:send-monthly {month?} {--company=} {--to=}';
+
     protected $description = 'Send monthly reports to company emails';
 
     public function handle(MonthlyReportService $service): int
@@ -35,6 +37,7 @@ class SendMonthlyReportsCommand extends Command
 
         if ($companies->isEmpty()) {
             $this->warn('No companies found for sending.');
+
             return self::SUCCESS;
         }
 
@@ -46,32 +49,46 @@ class SendMonthlyReportsCommand extends Command
                 continue;
             }
 
+            $filePath = null;
+
             try {
                 $data = $service->build($month, $company->id);
                 $exportRows = $service->makeExportRows($data['rows']);
 
                 $fileName = 'monthly-report-' . $month . '-company-' . $company->id . '.xlsx';
+                $filePath = storage_path('app/' . $fileName);
 
-Excel::store(new MonthlyReportExport($exportRows), $fileName, 'local');
+                $content = Excel::raw(
+                    new MonthlyReportExport($exportRows),
+                    ExcelFormat::XLSX
+                );
 
-$filePath = storage_path('app/' . $fileName);
-
-if (! file_exists($filePath)) {
-    throw new \RuntimeException('Export file was not created: ' . $filePath);
-}
-
-Mail::to($email)->send(
-    new MonthlyReportMail($company->name, $month, $filePath)
-);
-
-                if (file_exists($filePath)) {
-                    unlink($filePath);
+                if ($content === null || $content === '') {
+                    throw new \RuntimeException('Excel raw export returned empty content.');
                 }
+
+                if (! is_dir(storage_path('app'))) {
+                    mkdir(storage_path('app'), 0775, true);
+                }
+
+                file_put_contents($filePath, $content);
+
+                if (! file_exists($filePath)) {
+                    throw new \RuntimeException('Export file was not created: ' . $filePath);
+                }
+
+                Mail::to($email)->send(
+                    new MonthlyReportMail($company->name, $month, $filePath)
+                );
 
                 $this->info('Sent: ' . $company->name . ' -> ' . $email);
             } catch (Throwable $e) {
                 $this->error('Failed: ' . $company->name . ' -> ' . $email);
                 $this->error($e->getMessage());
+            } finally {
+                if ($filePath && file_exists($filePath)) {
+                    unlink($filePath);
+                }
             }
         }
 
