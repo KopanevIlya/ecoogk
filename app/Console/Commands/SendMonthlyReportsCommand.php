@@ -42,9 +42,11 @@ class SendMonthlyReportsCommand extends Command
         }
 
         foreach ($companies as $company) {
-            $email = $toOption ?: $company->report_email;
+            $emails = $toOption
+                ? array_filter(array_map('trim', explode(',', $toOption)))
+                : array_filter(array_map('trim', explode(',', (string) $company->report_email)));
 
-            if (! $email) {
+            if (empty($emails)) {
                 $this->warn('Skipped ' . $company->name . ': empty email');
                 continue;
             }
@@ -77,13 +79,13 @@ class SendMonthlyReportsCommand extends Command
                     throw new \RuntimeException('Export file was not created: ' . $filePath);
                 }
 
-                Mail::to($email)->send(
+                Mail::to($emails)->send(
                     new MonthlyReportMail($company->name, $month, $filePath)
                 );
 
-                $this->info('Sent: ' . $company->name . ' -> ' . $email);
+                $this->info('Sent: ' . $company->name . ' -> ' . implode(', ', $emails));
             } catch (Throwable $e) {
-                $this->error('Failed: ' . $company->name . ' -> ' . $email);
+                $this->error('Failed: ' . $company->name . ' -> ' . implode(', ', $emails));
                 $this->error($e->getMessage());
             } finally {
                 if ($filePath && file_exists($filePath)) {
