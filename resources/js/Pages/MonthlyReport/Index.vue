@@ -17,7 +17,15 @@ const form = reactive({
 })
 
 const submit = () => {
-  router.get(route('monthly-report.index'), form, {
+  const payload = {
+    month: form.month,
+  }
+
+  if (hasCompanyFilter.value && form.company_id) {
+    payload.company_id = form.company_id
+  }
+
+  router.get(route('monthly-report.index'), payload, {
     preserveState: true,
     preserveScroll: true,
   })
@@ -27,7 +35,9 @@ const exportReport = () => {
   const params = new URLSearchParams()
 
   if (form.month) params.append('month', form.month)
-  if (form.company_id) params.append('company_id', form.company_id)
+  if (hasCompanyFilter.value && form.company_id) {
+    params.append('company_id', form.company_id)
+  }
 
   window.location.href = `${route('monthly-report.export')}?${params.toString()}`
 }
@@ -72,6 +82,7 @@ const aiStatusClass = (status) => {
 }
 
 const hasCompanyFilter = computed(() => props.userRole === 'admin')
+const isResponsible = computed(() => props.userRole === 'responsible')
 </script>
 
 <template>
@@ -90,7 +101,9 @@ const hasCompanyFilter = computed(() => props.userRole === 'admin')
       <div class="mx-auto max-w-7xl sm:px-6 lg:px-8">
         <div class="mb-6 grid gap-4 md:grid-cols-3">
           <div class="rounded-lg bg-white p-5 shadow-sm">
-            <div class="text-sm text-gray-500">Всего позиций</div>
+            <div class="text-sm text-gray-500">
+              {{ isResponsible ? 'Моих отчетов' : 'Всего позиций' }}
+            </div>
             <div class="mt-2 text-2xl font-bold text-gray-900">{{ summary.total }}</div>
           </div>
 
@@ -100,7 +113,9 @@ const hasCompanyFilter = computed(() => props.userRole === 'admin')
           </div>
 
           <div class="rounded-lg bg-white p-5 shadow-sm">
-            <div class="text-sm text-gray-500">Не загружено</div>
+            <div class="text-sm text-gray-500">
+              {{ isResponsible ? 'Не найдено за период' : 'Не загружено' }}
+            </div>
             <div class="mt-2 text-2xl font-bold text-red-600">{{ summary.missing }}</div>
           </div>
         </div>
@@ -179,7 +194,7 @@ const hasCompanyFilter = computed(() => props.userRole === 'admin')
                 <tbody class="divide-y divide-gray-100 text-sm text-gray-700">
                   <tr
                     v-for="(row, index) in rows"
-                    :key="`${row.company_code}-${row.site_code}-${row.zone_code}-${index}`"
+                    :key="`${row.report_id ?? `${row.company_code}-${row.site_code}-${row.zone_code}`}-${index}`"
                     class="align-top"
                     :class="!row.uploaded ? 'bg-red-50' : ''"
                   >

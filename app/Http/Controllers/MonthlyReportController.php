@@ -73,6 +73,9 @@ class MonthlyReportController extends Controller
         if ($companyId) {
             $company = $companies->firstWhere('id', $companyId);
             $companySuffix = $company?->code ?: $company?->name ?: 'company';
+        } elseif ($data['summary']['total'] > 0 && count($companies) === 1) {
+            $company = $companies->first();
+            $companySuffix = $company?->code ?: $company?->name ?: 'company';
         }
 
         $filename = 'monthly-report-' . $month . '-' . $companySuffix . '.xlsx';
@@ -87,8 +90,12 @@ class MonthlyReportController extends Controller
         $month = $request->string('month')->toString() ?: now()->format('Y-m');
         $companyId = $request->integer('company_id');
 
-        if ($user->role === 'ecologist') {
+        if ($user->isEcologist()) {
             $companyId = $user->company_id;
+        }
+
+        if (! $user->isAdmin()) {
+            $companyId = null;
         }
 
         $from = Carbon::createFromFormat('Y-m', $month)->startOfMonth()->toDateString();
@@ -96,26 +103,21 @@ class MonthlyReportController extends Controller
 
         $companies = Company::query()
             ->where('active', true)
+            ->when($user->isAdmin() && $companyId, function ($query) use ($companyId) {
+                $query->where('id', $companyId);
+            })
+            ->when($user->isEcologist(), function ($query) use ($user) {
+                $query->where('id', $user->company_id);
+            })
+            ->when($user->isResponsible(), function ($query) use ($user, $from, $to) {
+                $query->whereHas('sites.reports', function ($reportQuery) use ($user, $from, $to) {
+                    $reportQuery
+                        ->where('user_id', $user->id)
+                        ->whereBetween('report_month', [$from, $to]);
+                });
+            })
             ->orderBy('name')
             ->get(['id', 'name', 'code']);
-
-        $sitesQuery = Site::query()
-            ->with('company:id,name,code')
-            ->where('active', true);
-
-        if ($companyId) {
-            $sitesQuery->where('company_id', $companyId);
-        }
-
-        $sites = $sitesQuery
-            ->orderBy('company_id')
-            ->orderBy('name')
-            ->get(['id', 'name', 'code', 'company_id', 'active']);
-
-        $zones = Zone::query()
-            ->where('active', true)
-            ->orderBy('name')
-            ->get(['id', 'name', 'code', 'active']);
 
         $reports = Report::query()
             ->with([
@@ -124,8 +126,9 @@ class MonthlyReportController extends Controller
                 'site.company:id,name,code',
                 'zone:id,name,code',
             ])
+            ->visibleFor($user)
             ->whereBetween('report_month', [$from, $to])
-            ->when($companyId, function ($query) use ($companyId) {
+            ->when($user->isAdmin() && $companyId, function ($query) use ($companyId) {
                 $query->whereHas('site', function ($q) use ($companyId) {
                     $q->where('company_id', $companyId);
                 });
@@ -133,45 +136,90 @@ class MonthlyReportController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
-        $reportMap = [];
-
-        foreach ($reports as $report) {
-            $key = $report->site_id . '_' . $report->zone_id;
-
-            if (! isset($reportMap[$key])) {
-                $reportMap[$key] = $report;
-            }
-        }
-
         $rows = [];
 
-        foreach ($sites as $site) {
-            foreach ($zones as $zone) {
-                $key = $site->id . '_' . $zone->id;
-                $report = $reportMap[$key] ?? null;
-
-                $aiResult = $report?->ai_result ?? '—';
+        if ($user->isResponsible()) {
+            foreach ($reports as $report) {
+                $aiResult = $report->ai_result ?? '—';
                 $parsed = $this->extractAiSections($aiResult);
 
                 $rows[] = [
-                    'company' => $site->company?->name ?? '—',
-                    'company_code' => $site->company?->code ?? '—',
-                    'site' => $site->name,
-                    'site_code' => $site->code,
-                    'zone' => $zone->name,
-                    'zone_code' => $zone->code,
+                    'company' => $report->site?->company?->name ?? '—',
+                    'company_code' => $report->site?->company?->code ?? '—',
+                    'site' => $report->site?->name ?? '—',
+                    'site_code' => $report->site?->code ?? '—',
+                    'zone' => $report->zone?->name ?? '—',
+                    'zone_code' => $report->zone?->code ?? '—',
                     'month' => $month,
-                    'uploaded' => (bool) $report,
-                    'status_label' => $report ? 'Загружено' : 'Не загружено',
-                    'photos_count' => $report ? $report->photos->count() : 0,
-                    'created_at' => $report?->created_at?->format('d.m.Y H:i') ?? '—',
-                    'created_by' => $report?->user?->name ?? '—',
-                    'ai_status' => $report?->ai_status ?? '—',
+                    'uploaded' => true,
+                    'status_label' => 'Загружено',
+                    'photos_count' => $report->photos->count(),
+                    'created_at' => $report->created_at?->format('d.m.Y H:i') ?? '—',
+                    'created_by' => $report->user?->name ?? '—',
+                    'ai_status' => $report->ai_status ?? '—',
                     'ai_result' => $aiResult,
                     'issues' => $parsed['issues'],
                     'recommendations' => $parsed['recommendations'],
-                    'report_id' => $report?->id,
+                    'report_id' => $report->id,
                 ];
+            }
+        } else {
+            $sites = Site::query()
+                ->with('company:id,name,code')
+                ->where('active', true)
+                ->when($user->isAdmin() && $companyId, function ($query) use ($companyId) {
+                    $query->where('company_id', $companyId);
+                })
+                ->when($user->isEcologist(), function ($query) use ($user) {
+                    $query->where('company_id', $user->company_id);
+                })
+                ->orderBy('company_id')
+                ->orderBy('name')
+                ->get(['id', 'name', 'code', 'company_id', 'active']);
+
+            $zones = Zone::query()
+                ->where('active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'code', 'active']);
+
+            $reportMap = [];
+
+            foreach ($reports as $report) {
+                $key = $report->site_id . '_' . $report->zone_id;
+
+                if (! isset($reportMap[$key])) {
+                    $reportMap[$key] = $report;
+                }
+            }
+
+            foreach ($sites as $site) {
+                foreach ($zones as $zone) {
+                    $key = $site->id . '_' . $zone->id;
+                    $report = $reportMap[$key] ?? null;
+
+                    $aiResult = $report?->ai_result ?? '—';
+                    $parsed = $this->extractAiSections($aiResult);
+
+                    $rows[] = [
+                        'company' => $site->company?->name ?? '—',
+                        'company_code' => $site->company?->code ?? '—',
+                        'site' => $site->name,
+                        'site_code' => $site->code,
+                        'zone' => $zone->name,
+                        'zone_code' => $zone->code,
+                        'month' => $month,
+                        'uploaded' => (bool) $report,
+                        'status_label' => $report ? 'Загружено' : 'Не загружено',
+                        'photos_count' => $report ? $report->photos->count() : 0,
+                        'created_at' => $report?->created_at?->format('d.m.Y H:i') ?? '—',
+                        'created_by' => $report?->user?->name ?? '—',
+                        'ai_status' => $report?->ai_status ?? '—',
+                        'ai_result' => $aiResult,
+                        'issues' => $parsed['issues'],
+                        'recommendations' => $parsed['recommendations'],
+                        'report_id' => $report?->id,
+                    ];
+                }
             }
         }
 
